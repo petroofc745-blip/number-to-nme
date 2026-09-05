@@ -1,7 +1,6 @@
 {
-  "name": "number-to-nme",
+  "name": "number-to-name",
   "version": "1.0.0",
-  "description": "API to lookup number bypassing slowAES",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

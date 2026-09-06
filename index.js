@@ -4,42 +4,45 @@ const puppeteer = require('puppeteer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+let browser;
+
+// സെർവർ സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ ബ്രൗസർ ഒരു തവണ മാത്രം ലോഞ്ച് ചെയ്യുന്നു
+(async () => {
+    browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--blink-settings=imagesEnabled=false',
+            '--no-first-run',
+            '--no-zygote'
+        ]
+    });
+    console.log("Browser ready");
+})();
+
 app.get('/api/lookup', async (req, res) => {
     const phone = req.query.number || '9605544131';
     const targetUrl = `https://kaise.page.gd/public.php?phone=${phone}`;
 
-    let browser = null;
+    let page = null;
     try {
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--blink-settings=imagesEnabled=false',
-                '--no-first-run',
-                '--no-zygote'
-            ]
-        });
+        page = await browser.newPage();
 
-        const page = await browser.newPage();
-
-        // ചിത്രങ്ങൾ, സ്റ്റൈലുകൾ, ഫ്രെയിമുകൾ എന്നിവ ഒഴിവാക്കി ലോഡിംഗ് വേഗത്തിലാക്കുന്നു
+        // CSS, Images, Fonts എന്നിവ ബ്ലോക്ക് ചെയ്ത് വേഗത കൂട്ടുന്നു
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            const resource = req.resourceType();
-            if (['image', 'stylesheet', 'font', 'media'].includes(resource)) {
+            if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
                 req.abort();
             } else {
                 req.continue();
             }
         });
 
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-
-        // networkidle2-ന് പകരം domcontentloaded ഉപയോഗിക്കുന്നു (ടൈംഔട്ട്: 8000ms / 8 സെക്കൻഡ്)
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 8000 });
+        // ടൈംഔട്ട് 4000ms (4 സെക്കൻഡ്) ആക്കി കുറച്ചു
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 4000 });
         
         const content = await page.evaluate(() => document.body.innerText);
 
@@ -50,7 +53,7 @@ app.get('/api/lookup', async (req, res) => {
             parsedData = { raw_output: content };
         }
 
-        await browser.close();
+        await page.close();
 
         return res.json({
             status: "success",
@@ -60,7 +63,7 @@ app.get('/api/lookup', async (req, res) => {
         });
 
     } catch (error) {
-        if (browser) await browser.close();
+        if (page) await page.close();
         return res.status(500).json({
             status: "error",
             developer: "@fameneedsme",
